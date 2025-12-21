@@ -8,7 +8,7 @@ import json
 from nanograv_func import *
 from ng_blue_func import *
 
-fs = 13
+fs = 15
 plt.rcParams.update({'font.size': fs})
 
 # Much of this code is taken from the NANOGrav collaboration's github page, where they have code that generates certain plots from their set of 4 (or 5?) papers.
@@ -54,7 +54,13 @@ Omega_sig_f_high += [10**(OMG_15.mean(axis=0) - 1*OMG_15.std(axis=0))[-1], 10**(
 Omega_sig_f_high += [10**(OMG_15.mean(axis=0) - 2*OMG_15.std(axis=0))[-1], 10**(OMG_15.mean(axis=0) + 2*OMG_15.std(axis=0))[-1]]
 Omega_sig_f_high += [10**(OMG_15.mean(axis=0) - 3*OMG_15.std(axis=0))[-1], 10**(OMG_15.mean(axis=0) + 3*OMG_15.std(axis=0))[-1]]
 
-fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(6,10),constrained_layout = True)
+#fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(6,10),constrained_layout = True)
+fig, (ax1, ax2, ax3) = plt.subplots(
+    1, 3,
+    figsize=(18, 5),
+)
+
+fig.subplots_adjust(top=0.85, bottom=0.15)
 
  
 N = 2000
@@ -86,8 +92,18 @@ while i >= 0:
             partition_idx_high[j] -= 1
     i-=1
 
-ax1.plot(M_arr, omega_arr[0], color = colors[0], linewidth = lw)
-ax1.plot(M_arr, omega_arr[1], color = colors[1], linewidth = lw, linestyle='dashed')
+ax1.plot(
+    M_arr, omega_arr[0],
+    color='black', linewidth=lw,
+    label=r'$f_{\mathrm{low}}$'
+)
+
+ax1.plot(
+    M_arr, omega_arr[1],
+    color='black', linewidth=lw,
+    linestyle='dashed',
+    label=r'$f_{\mathrm{high}}$'
+)
 
 for i in range(3):
     ax1.plot(M_arr[partition_idx_low[2*i+1]:partition_idx_low[2*i]], omega_arr[0][partition_idx_low[2*i+1]:partition_idx_low[2*i]] , color = 'orange', alpha = 0.7-i*0.2, linewidth = lw+thicker)
@@ -96,10 +112,6 @@ for i in range(3):
 ax1.set_yscale('log')
 ax1.set_xlabel(r'$m/H_{\mathrm{inf}}$')
 ax1.set_xlim(0,1.5)
-
-ax1.annotate(r'$\tau_m/\tau_r = 10^{27}, H_{\mathrm{inf}} = 1$ GeV', xy=(0.05,0.15),xycoords='axes fraction',fontsize=fs)
-ax1.annotate(r'$f_{\mathrm{low}}$', xy=(0.77,0.5),xycoords='axes fraction',fontsize=fs)
-ax1.annotate(r'$f_{\mathrm{high}}$', xy=(0.85,0.60),xycoords='axes fraction',fontsize=fs)
 
 tau_m_arr = np.logspace(5,31, N)
 M_GW = H_inf
@@ -126,9 +138,6 @@ ax2.set_xlabel(r'$\tau_m / \tau_r$')
 ax2.set_xlim(1e10,1e30)
 ax2.set_ylim(1e-29,1e-5)
 
-ax2.annotate(r'$m = H_{\mathrm{inf}}, H_{\mathrm{inf}} = 1$ GeV', xy=(0.05,0.85),xycoords='axes fraction',fontsize=fs)
-ax2.annotate(r'$f_{\mathrm{low}}$', xy=(0.75,0.6),xycoords='axes fraction',fontsize=fs)
-ax2.annotate(r'$f_{\mathrm{high}}$', xy=(0.7,0.8),xycoords='axes fraction',fontsize=fs)
 
 H_inf = np.logspace(-24, 14, N) # in GeV
 
@@ -157,15 +166,12 @@ for i in range(3):
     ax3.plot(H_inf  [partition_idx_low[2*i+1]:partition_idx_low[2*i]], omega_arr[1][partition_idx_low[2*i+1]:partition_idx_low[2*i]] , color = 'orange', alpha = 0.7-i*0.2, linewidth = lw+thicker)
 
 
+
 ax3.set_xscale('log')
 ax3.set_yscale('log')
 ax3.set_xlabel(r'$H_{\mathrm{inf}}$ [GeV]')
 ax3.set_xlim(1e-20,1e10)
 ax3.set_ylim(1e-18,1e7)
-
-ax3.annotate(r'$m = H_{\mathrm{inf}}, \tau_m/\tau_r = 10^{27}$', xy=(0.05,0.15),xycoords='axes fraction',fontsize=fs)
-ax3.annotate(r'$f_{\mathrm{low}}$', xy=(0.5,0.35),xycoords='axes fraction',fontsize=fs)
-ax3.annotate(r'$f_{\mathrm{high}}$', xy=(0.55,0.5),xycoords='axes fraction',fontsize=fs)
 
 axs = [ax1,ax2,ax3]
 
@@ -173,6 +179,14 @@ for i in range(3):
     axs[i].set_ylabel(r'$h_0^2\Omega_{\mathrm{GW}}$')
     axs[i].grid(which='major', alpha=.2)
     axs[i].grid(which='minor', alpha=.2)
-    
-plt.savefig('nanograv/2d_figs/fig0.pdf')
+fig.legend(
+    loc='upper center',
+    ncol=2,
+    frameon=False,
+    fontsize=20,
+    bbox_to_anchor=(0.5, 1.02)
+)
+plt.tight_layout(rect=[0, 0, 1, 0.90])
+
+plt.savefig('nanograv/2d_figs/fig1_horizontal_legend.pdf')
 plt.show()
