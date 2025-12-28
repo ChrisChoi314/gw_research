@@ -1,53 +1,37 @@
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 
-from emir_func import *  # expects: M_GW, k_0, k_c, k_eq, K (or K=0),
-                         # scale_fac, d_scale_fac_dz, d_scale_fac_dz2,
-                         # diffeqMG, solve_one, give_eta
+from emir_func import *  # provides: H_0, omega_M, omega_R, omega_L, M_GW, k_0, k_c, k_eq,
+                         # scale_fac, d_scale_fac_dz, d_scale_fac_dz2, diffeqMG, solve_one, give_eta, etc.
 
-os.makedirs("wkb_num_figs", exist_ok=True)
-
+# --- match your normalization ---
 P_prim_k = 2.43e-10
+
+fs = 15
+plt.rcParams.update({'font.size': fs})
 
 def A_of_k(k):
     k = np.asarray(k, dtype=float)
     return np.sqrt(P_prim_k * np.pi**2 / (2.0 * np.maximum(k, 1e-300)**3))
 
-def omega_phys(k, a):
-    return np.sqrt((k/a)**2 + M_GW**2)
+def w0_of_k(k, a0=1.0):
+    return np.sqrt((k/a0)**2 + M_GW**2)
 
-def Omega_conformal(k, eta):
-    # frequency for u-equation: u'' + Omega^2 u = 0
-    a = scale_fac(eta)
-    term = k**2 + (a*M_GW)**2 - d_scale_fac_dz2(eta)/a + 2.0*K
-    return np.sqrt(max(term, 0.0))
-
-def gamma_env_wkb_today(k, a0=1.0):
+def gamma_env_wkb(k, a0=1.0):
     ak = solve_one(float(k))
-    wk = omega_phys(k, ak)
-    w0 = omega_phys(k, a0)
+    wk = np.sqrt((k/ak)**2 + M_GW**2)
+    w0 = w0_of_k(k, a0=a0)
     return A_of_k(k) * np.sqrt(wk * ak**3 / (w0 * a0**3))
 
-def gamma_env_num_window(k, Nosc=120, n_eta=1600, tail_frac=0.25, rtol=1e-6, atol=1e-9):
-    """
-    Numerical NO-WKB solve near entry, but with a window sized by conformal frequency:
-      eta_end = eta_k + (2π Nosc)/Omega_entry
-    Returns: gamma_env_end, eta_end, a_end, w_end
-    """
+def gamma_env_num_window(k, Nosc=120, n_eta=1400, tail_frac=0.25, rtol=1e-6, atol=1e-9):
     k = float(k)
 
     a_k = solve_one(k)
     eta_k = give_eta(a_k)
 
     eta_start = eta_k / 10.0
-
-    Omega_entry = Omega_conformal(k, eta_k)
-    if Omega_entry <= 0:
-        return np.nan, np.nan, np.nan, np.nan
-
-    eta_end = eta_k + (2.0*np.pi*Nosc)/Omega_entry
+    eta_end   = eta_k + (2.0*np.pi*Nosc)/k
     etas = np.linspace(eta_start, eta_end, n_eta)
 
     a_init  = scale_fac(etas[0])
@@ -68,7 +52,7 @@ def gamma_env_num_window(k, Nosc=120, n_eta=1600, tail_frac=0.25, rtol=1e-6, ato
         method="DOP853",
         rtol=rtol,
         atol=atol,
-        max_step=(etas[-1]-etas[0]) / 600.0,
+        max_step=(etas[-1]-etas[0]) / 400.0,
     )
     if not sol.success:
         raise RuntimeError(f"solve_ivp failed for k={k}: {sol.message}")
@@ -79,71 +63,66 @@ def gamma_env_num_window(k, Nosc=120, n_eta=1600, tail_frac=0.25, rtol=1e-6, ato
 
     n_tail = max(80, int(tail_frac * len(etas)))
     g_tail = gamma[-n_tail:]
-    gamma_env_end = np.sqrt(2.0*np.mean(g_tail**2))  # peak ≈ sqrt(2)*RMS
-
+    gamma_end = np.sqrt(2.0*np.mean(g_tail**2))  # peak ≈ sqrt(2)*RMS
     a_end = scale_fac(eta_end)
-    w_end = omega_phys(k, a_end)
-    return gamma_env_end, eta_end, a_end, w_end
+    w_end = w0_of_k(k, a0=a_end)
+    return gamma_end, a_end, w_end
 
-def sqrtP_today_from_gamma0(k, gamma0, a0=1.0):
-    w0 = omega_phys(k, a0)
+def sqrtP_from_gamma(k, gamma_env):
+    w0 = w0_of_k(k, a0=1.0)
     pref = w0**2 / (w0**2 - M_GW**2)
-    P = pref * (2.0*k**3/np.pi**2) * (gamma0**2)
+    P = pref * (2.0*k**3/np.pi**2) * (gamma_env**2)
     return np.sqrt(P)
 
-# --- go lower in k/k0 ---
-kmin = 1e-10 * k_0    # <<<<< push down as far as you like
-kmax = 1e+2  * k_0
-Nk   = 30             # smoother curve across more decades
+# --- choose k range + sampling ---
+kmin = 1e-4 * k_0
+kmax = 1e+2 * k_0
+Nk   = 17
 k_list = np.logspace(np.log10(kmin), np.log10(kmax), Nk)
 
-a0 = 1.0  # set to a_0 if your convention uses non-1 today
-
+# --- compute curves ---
 y_num = []
 y_wkb = []
-k_ok  = []
 
 for i, k in enumerate(k_list):
     print(f"[{i+1}/{len(k_list)}] k/k0={k/k_0:.2e}", flush=True)
+    g_end, a_end, w_end = gamma_env_num_window(k)
+    gW = gamma_env_wkb(k)
 
-    try:
-        g_end, eta_end, a_end, w_end = gamma_env_num_window(k, Nosc=120, n_eta=1600)
-        if not np.isfinite(g_end):
-            continue
+    a0 = 1.0
+    w0 = w0_of_k(k, a0=a0)
 
-        # propagate numerical envelope to today using WKB scaling
-        w0 = omega_phys(k, a0)
-        g0_from_num = g_end * np.sqrt((w_end * a_end**3) / (w0 * a0**3))
+    # propagate numerical envelope from window end -> today using WKB scaling
+    g0_num = g_end * np.sqrt((w_end * a_end**3) / (w0 * a0**3))
 
-        g0_wkb = gamma_env_wkb_today(k, a0=a0)
+    y_num.append(sqrtP_from_gamma(k, g0_num))
+    y_wkb.append(sqrtP_from_gamma(k, gW))
 
-        y_num.append(sqrtP_today_from_gamma0(k, g0_from_num, a0=a0))
-        y_wkb.append(sqrtP_today_from_gamma0(k, g0_wkb,      a0=a0))
-        k_ok.append(k)
 
-    except Exception as e:
-        print(f"  skipping k/k0={k/k_0:.2e} due to: {e}", flush=True)
-        continue
-
-k_ok  = np.array(k_ok)
 y_num = np.array(y_num)
 y_wkb = np.array(y_wkb)
 
-fig, ax = plt.subplots(figsize=(8.0, 5.4))
-ax.plot(k_ok/k_0, y_wkb, lw=3.0, ls='-', label='WKB (today)')
-ax.plot(k_ok/k_0, y_num, lw=3.0, ls=':', label='Numerical (to η_end) + WKB propagation')
+# --------- ONLY CHANGE: x-axis is omega_0 instead of k/k0 ----------
+omega0_list = w0_of_k(k_list, a0=1.0)
 
-ax.axvline(k_c/k_0,  ls='--', lw=1.8)
-ax.axvline(k_eq/k_0, ls='--', lw=1.8)
-ax.axvline(1.0,      ls='--', lw=1.8)
+# --- plot (no markers; WKB solid, numerical dotted) ---
+fig, ax = plt.subplots(figsize=(8.0, 5.4))
+ax.plot(omega0_list, y_wkb, lw=3.0, ls='-', label='WKB Approximation')
+ax.plot(omega0_list, y_num, lw=3.0, ls=':', label='Numerical ODE ')
+
+
+# --- label the vertical markers ---
+ymin, ymax = ax.get_ylim()
+y_text = ymin * 3.0  # a little above the bottom on log-y
+
+
 
 ax.set_xscale('log')
 ax.set_yscale('log')
-ax.set_xlabel(r'$k/k_0$')
-ax.set_ylabel(r'$[P(\omega_0)]^{1/2}$')
-ax.set_title(r'WKB vs numerical with consistent late-time propagation')
-ax.grid(True, which='both', alpha=0.3)
+ax.set_xlabel(r'$\omega_0$ [Hz]')
+ax.set_ylabel(r'$[P(\omega_0)]^{1/2}$ ')
+#ax.grid(True, which='both', alpha=0.3)
 ax.legend()
 
-plt.savefig("wkb_num_figs/wkb_quality_sqrtP_vs_k_lowk_extended.pdf", bbox_inches="tight")
+plt.savefig("wkb_num_figs/wkb.pdf", bbox_inches="tight")
 plt.show()
