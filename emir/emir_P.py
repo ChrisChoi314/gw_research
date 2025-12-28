@@ -6,12 +6,16 @@ import math
 from scipy.integrate import odeint
 from emir_func import *
 
+
+fs = 15
+plt.rcParams.update({'font.size': fs})
+
 N = 1000
 P_prim_k = 2.43e-10
 fig, (ax1) = plt.subplots(1)  # , figsize=(22, 14))
 def A(k):
     return np.where(k >= 0., np.sqrt(P_prim_k*np.pi**2/(2*k**3)), -1.)
-'''
+
 omega_0 = np.logspace(-8 + .2, -7)
 omega_0 = np.logspace(math.log(M_GW, 10), -2, N)
 k = np.where(omega_0 >= M_GW, a_0 * np.sqrt(omega_0**2 - M_GW**2), -1.)
@@ -29,7 +33,7 @@ a_k_prime_GR = (beta + np.sqrt(beta) * np.sqrt(4 * a_eq**2 * k_prime**2 + beta))
 gamma_k_t_0 = A(k)*np.sqrt(omega_k * a_k**3 / (omega_0*a_0**3))
 P = np.where(omega_0 <= M_GW, np.nan, omega_0**2 /
              (omega_0**2-M_GW**2)*(2*k**3/np.pi**2)*gamma_k_t_0**2)
-#P = omega_0**2/(omega_0**2-M_GW**2)*(2*k**3/np.pi**2)#*y_k_0**2
+P = omega_0**2/(omega_0**2-M_GW**2)*(2*k**3/np.pi**2)#*y_k_0**2
 gamma_k_GR_t_0 = A(k_prime)*a_k_prime_GR/a_0
 P_GR = (2*k_prime**3/np.pi**2)*gamma_k_GR_t_0**2  # *y_k_0**2
 S = np.where(omega_0 <= M_GW, np.nan, k_prime * a_k / (k * a_k_prime_GR)
@@ -39,35 +43,36 @@ omega_c = np.sqrt((k_c/a_c)**2 + M_GW**2)
 
 
 def enhance_approx(x):
-    if x < M_GW:
-        return 0.
-    val = a_0 * np.sqrt(x**2 - M_GW**2)
-    if k_0 < val:
-        return 1.
-    elif val <= k_0 and val >= k_c:
-        if val >= k_eq:
-            output = (x**2 / M_GW**2 - 1)**(-3/4)
-            return output
-        if val < k_eq and k_eq < k_0:
-            output = k_eq/(np.sqrt(2)*k_0)(x**2 / M_GW**2 - 1)**(-5/4)
-            return output
-        if k_eq > k_0:
-            output = (x**2 / M_GW**2 - 1)**(-5/4)
-            return output
-    elif val <= k_c:
-        beta = H_eq**2 * a_eq**4 / (2)
-        a_k_0_GR = (beta + np.sqrt(beta) * np.sqrt(4 * a_eq**2 * k_0**2 + beta)) / (
-            2. * a_eq * k_0**2
-        )
-        if abs(x**2 / M_GW**2 - 1) < 1e-25:
-            return 0.
-        output = a_c/a_k_0_GR*np.sqrt(k_c/k_0)*(x**2 / M_GW**2 - 1)**(-1/2)
-        return output
+    if x <= M_GW:
+        return 0.0
+
+    # stable k = a0*sqrt((ω-M)(ω+M))
+    k = a_0 * np.sqrt((x - M_GW) * (x + M_GW))
+    delta = x**2 / M_GW**2 - 1.0
+
+    if k >= k_0:
+        return 1.0  # Eq. (50):contentReference[oaicite:4]{index=4}
+
+    if (k_c <= k) and (k < k_0):
+        if k >= k_eq:
+            return delta**(-3/4)  # Eq. (55), keq << k << k0:contentReference[oaicite:5]{index=5}
+        else:
+            if k_eq < k_0:
+                return np.sqrt(k_eq/(2.0*k_0)) * delta**(-5/4)  # Eq. (55), k << keq << k0:contentReference[oaicite:6]{index=6}
+            else:
+                return delta**(-5/4)  # Eq. (55), k << k0 << keq:contentReference[oaicite:7]{index=7}
+
+    # k < k_c: Eq. (60):contentReference[oaicite:8]{index=8}
+    beta = H_eq**2 * a_eq**4 / 2.0
+    a_k0_GR = (beta + np.sqrt(beta) * np.sqrt(4 * a_eq**2 * k_0**2 + beta)) / (2.0 * a_eq * k_0**2)
+
+    return (a_c / a_k0_GR) * np.sqrt(k_c / k_0) * delta**(-1/2)
+
 
 
 S_approx = np.vectorize(enhance_approx)(omega_0)
 
-'''
+
 # Figure 4 from Emir Paper
 # use omega_0 = np.logspace(math.log(M_GW, 10)+ 0.00000000001, -7, N)
 #M_GW = 2e-7
@@ -89,16 +94,24 @@ P_GR = (2*k_prime**3/np.pi**2)*gamma_k_GR_t_0**2  # *y_k_0**2
 S = np.where(omega_0 <= M_GW, np.nan, k_prime * a_k / (k * a_k_prime_GR)
             * np.sqrt(omega_k * a_k / (omega_0 * a_0)))
     
-ax1.plot(omega_0, np.sqrt(omega_0*a_k**3*omega_k/a_0/k**2*P_prim_k), label='alternate',linewidth=7.0)
-ax1.plot(omega_0, np.sqrt(P),'-.', label='numerical')
-ax1.plot(omega_0, np.sqrt(P_GR*S**2), '--', label='fully analytical')
-# ax1.plot(omega_0, np.sqrt(P/P_GR), label='S^2')
+#ax1.plot(omega_0, np.sqrt(omega_0*a_k**3*omega_k/a_0/k**2*P_prim_k), label='alternate',linewidth=7.0)
+ax1.plot(omega_0, np.sqrt(P),'-.', label='WKB approximation')
+ax1.plot(omega_0, np.sqrt(P_GR*S**2), '--', label='semi-analytical')
+#ax1.plot(omega_0, np.sqrt(P/P_GR), label='S^2')
 ax1.set_xlabel(r'$\omega_0$ [Hz]')
 ax1.set_ylabel(r'$[P(\omega_0)]^{1/2}$')
+ax1.set_xscale('log')
+ax1.set_yscale('log')
+
+plt.legend()
 
 ax1.set_xlim(1e-8, 1e-7)
-#ax1.set_ylim(1e-18, 1e-2)
-plt.title('Power Spectrum')
+ax1.set_ylim(1e-18, 1e-2)
+plt.savefig("emir/emir_P_figs/power_spectrum_for_pres.pdf")
+plt.plot()
+
+import sys
+sys.exit()
 
 '''
 # Figure 5 from Emir Paper

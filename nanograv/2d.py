@@ -8,7 +8,7 @@ import json
 from nanograv_func import *
 from ng_blue_func import *
 
-fs = 15
+fs = 12
 plt.rcParams.update({'font.size': fs})
 
 # Much of this code is taken from the NANOGrav collaboration's github page, where they have code that generates certain plots from their set of 4 (or 5?) papers.
